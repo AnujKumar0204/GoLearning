@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Go WebSocket Tutorial</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js" crossorigin="anonymous"></script>
+    <!-- <script src="https://cdn.socket.io/4.8.0/socket.io.min.js" crossorigin="anonymous"></script> -->
+    <script>
+        // Establish a Socket.IO connection to the server
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('roomId');
+
+        var socket = io("/chat", {query: { roomId: roomId } });
+
+        // Listen for the 'hello' event from the server
+        socket.on('connection', function(msg) {
+            console.log("socket connected")
+            alert(msg); // Display the message in an alert box
+        });
+
+        // Listen for the 'new_message' event from the server
+        socket.on('reply', function(msg) {
+            console.log("Received new message: ", msg);
+            const p = document.createElement("p");
+            p.innerText = msg;
+            document.body.appendChild(p);
+        });
+
+        // Send a message to the server when the button is clicked
+        function sendMessage() {
+            const message = document.getElementById("message").value;
+            socket.emit("msg", roomId, message);
+        }
+    </script>
+</head>
+<body>
+    <h1>Socket.IO Client</h1>
+    <input type="text" id="message" placeholder="Enter a message" />
+    <button onclick="sendMessage()">Send Message</button>
+</body>
+</html>
