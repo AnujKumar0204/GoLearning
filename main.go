@@ -5,9 +5,20 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 
+	"github.com/gofiber/fiber/v2"
 	socketio "github.com/googollee/go-socket.io"
 )
+
+// Define a struct to hold user details
+type User struct {
+	roomId string
+	name   string
+}
+
+// A map to store user details associated with each Socket.IO connection ID
+var users sync.Map
 
 func main() {
 
@@ -18,62 +29,23 @@ func main() {
 	// 	return
 	// }
 
-	// app := fiber.New()
+	app := fiber.New()
+	app.Get("/fiber", func(c *fiber.Ctx) error { return c.SendString("Hello This is fiber") })
 
 	// router.RouteHandler(app, db)
 
-	// app.Listen(":8080")
-
-	// app := fiber.New()
-
-	// app.Use("/ws", func(c *fiber.Ctx) error {
-	// 	// IsWebSocketUpgrade returns true if the client
-	// 	// requested upgrade to the WebSocket protocol.
-	// 	if websocket.IsWebSocketUpgrade(c) {
-	// 		c.Locals("allowed", true)
-	// 		return c.Next()
-	// 	}
-	// 	return fiber.ErrUpgradeRequired
-	// })
-
-	// app.Get("/ws/:id", websocket.New(func(c *websocket.Conn) {
-	// 	// c.Locals is added to the *websocket.Conn
-	// 	log.Println(c.Locals("allowed"))  // true
-	// 	log.Println(c.Params("id"))       // 123
-	// 	log.Println(c.Query("v"))         // 1.0
-	// 	log.Println(c.Cookies("session")) // ""
-
-	// 	// websocket.Conn bindings https://pkg.go.dev/github.com/fasthttp/websocket?tab=doc#pkg-index
-	// 	var (
-	// 		mt  int
-	// 		msg []byte
-	// 		err error
-	// 	)
-	// 	for {
-	// 		if mt, msg, err = c.ReadMessage(); err != nil {
-	// 			log.Println("read:", mt, err)
-	// 			break
-	// 		}
-	// 		log.Printf("recv:", mt)
-	// 		log.Printf("recv: %s", msg)
-
-	// 		if err = c.WriteMessage(mt, msg); err != nil {
-	// 			log.Println("write:", err)
-	// 			break
-	// 		}
-	// 	}
-
-	// }))
-
-	// log.Fatal(app.Listen(":3000"))
+	// Run Fiber on port 8000
+	go func() {
+		log.Fatal(app.Listen(":8000"))
+	}()
 
 	server := socketio.NewServer(nil)
 
-	server.OnConnect("/", func(s socketio.Conn) error {
-		s.SetContext("")
-		fmt.Println("connected:", s.ID())
-		return nil
-	})
+	// server.OnConnect("/", func(s socketio.Conn) error {
+	// 	s.SetContext("")
+	// 	fmt.Println("connected:", s.ID())
+	// 	return nil
+	// })
 
 	// Handle a "msg" event and broadcast a reply to the sender
 	// server.OnEvent("/chat", "joinRoom", func(s socketio.Conn, roomId string) {
@@ -83,23 +55,6 @@ func main() {
 	// 	s.Emit("reply", "have have connected to room "+roomId)
 	// 	fmt.Println("User wants to join room:", roomId)
 	// })
-
-	// Handle a "msg" event and broadcast a reply to the sender
-	server.OnEvent("/chat", "msg", func(s socketio.Conn, roomId string, msg string) {
-		// Print the received message
-		fmt.Println("RoomId is:", roomId, "Received message:", msg)
-		// fmt.Println("RoomId is:", roomId)
-		// fmt.Println("Received message:", s.Rooms())
-
-		// Emit a "reply" event to the sender
-		// s.Emit("reply", "have "+msg)
-
-		// // You can also broadcast to all users in room 2
-		// s.Emit("reply", "Message received: "+msg)
-
-		// Broadcast to all clients in the room with ID "2"
-		server.BroadcastToRoom("/chat", roomId, "reply", msg)
-	})
 
 	// Handle user connections
 	server.OnConnect("/chat", func(s socketio.Conn) error {
@@ -115,12 +70,21 @@ func main() {
 
 		// Get the 'roomId' value
 		roomId := values.Get("roomId")
-		// fmt.Println("RoomId is:", roomId)
+		user_name := values.Get("user")
+		// fmt.Println("User is:", user)
+
+		// set user for the connection
+		user := User{
+			roomId: roomId,
+			name:   user_name,
+		}
+		// Associate the user struct with the connection ID
+		users.Store(s.ID(), user)
 
 		// Automatically add the user to room 2 upon connection
 		if roomId != "" {
 			s.Join(roomId) // The user is automatically added to room "2"
-			s.Emit("reply", "You Are connected to chat room"+roomId)
+			s.Emit("reply", "You Are connected to chat room "+roomId)
 			fmt.Println("A user connected:", s.ID(), "to Room", roomId)
 		} else {
 			s.Emit("reply", "Welcone to my chat room")
@@ -128,6 +92,32 @@ func main() {
 		// fmt.Println("User joined room 2:", s.ID())
 
 		return nil
+	})
+
+	// Handle a "msg" event and broadcast a reply to the sender
+	server.OnEvent("/chat", "set_user", func(s socketio.Conn, name string) {
+		user := User{
+			name: name,
+		}
+		// Associate the user struct with the connection ID
+		users.Store(s.ID(), user)
+		fmt.Printf("User registered: %+v with Socket ID %s\n", user, s.ID())
+		s.Emit("set_user_success", "User registered successfully!")
+	})
+
+	server.OnEvent("/chat", "msg", func(s socketio.Conn, roomId string, msg string) {
+		// Print the received message
+		fmt.Println("RoomId is:", roomId, "Received message:", msg)
+		user, ok := users.Load(s.ID())
+		var new_message = ""
+		if ok {
+			new_message = user.(User).name + " :- " + msg
+		} else {
+			new_message = "Anonymous User :- " + msg
+		}
+
+		// Broadcast to all clients in the room with ID "2"
+		server.BroadcastToRoom("/chat", roomId, "reply", new_message)
 	})
 
 	// server.OnEvent("/chat", "msg", func(s socketio.Conn, msg string) {
@@ -148,17 +138,6 @@ func main() {
 		s.Emit("bye", last)
 		s.Close()
 		return last
-	})
-
-	server.OnError("/", func(s socketio.Conn, e error) {
-		// server.Remove(s.ID())
-		fmt.Println("meet error:", e)
-	})
-
-	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
-		// Add the Remove session id. Fixed the connection & mem leak
-		// server.Remove(s.ID())
-		fmt.Println("closed", reason)
 	})
 
 	go server.Serve()
