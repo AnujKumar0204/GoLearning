@@ -11,8 +11,9 @@
         // Establish a Socket.IO connection to the server
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('roomId');
+        const user = urlParams.get('user');
 
-        var socket = io("/chat", {query: { roomId: roomId } });
+        var socket = io("/chat", {query: { roomId: roomId, user: user} });
 
         // Listen for the 'hello' event from the server
         socket.on('connection', function(msg) {
@@ -28,6 +29,19 @@
             document.body.appendChild(p);
         });
 
+        socket.on('set_user_success', function(msg) {
+            console.log("Received new message: ", msg);
+            alert(msg);
+            document.getElementById("user-form").style.display="none";
+            document.getElementById("message-form").style.display="block";
+        });
+
+        // Send a message to the server when the button is clicked
+        function setUser() {
+            const name = document.getElementById("name").value;
+            socket.emit("set_user", name);
+        }
+
         // Send a message to the server when the button is clicked
         function sendMessage() {
             const message = document.getElementById("message").value;
@@ -37,7 +51,13 @@
 </head>
 <body>
     <h1>Socket.IO Client</h1>
-    <input type="text" id="message" placeholder="Enter a message" />
-    <button onclick="sendMessage()">Send Message</button>
+    <Form id="user-form" method="dialog" hidden>
+        <input type="text" id="name" placeholder="Enter Your Name" />
+        <button type="submit" onclick="setUser()">Set User</button>
+    </Form>
+    <Form id="message-form" method="dialog">
+        <input type="text" id="message" placeholder="Enter a message" />
+        <button type="submit" onclick="sendMessage()">Send Message</button>
+    </Form>
 </body>
 </html>
